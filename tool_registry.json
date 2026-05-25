@@ -1,0 +1,109 @@
+{
+  "categories": [
+    {
+      "title": "Information gathering tools",
+      "description": "Dynamic tools for recon and target discovery",
+      "tools": [
+        {
+          "title": "CloudFlair",
+          "description": "Find origin IP behind Cloudflare-protected targets",
+          "project_url": "https://github.com/christophetd/CloudFlair",
+          "supported_os": ["linux", "macos"],
+          "tags": ["osint", "recon", "cloudflare"],
+          "install_commands": [
+            "git clone https://github.com/christophetd/CloudFlair.git",
+            "cd CloudFlair && pip3 install -r requirements.txt"
+          ],
+          "run_commands": [
+            "cd CloudFlair && python3 cloudflair.py -h"
+          ]
+        },
+        {
+          "title": "Subfinder",
+          "description": "Fast passive subdomain discovery tool",
+          "project_url": "https://github.com/projectdiscovery/subfinder",
+          "supported_os": ["linux", "macos"],
+          "tags": ["recon", "subdomain", "osint"],
+          "install_commands": [
+            "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
+          ],
+          "run_commands": [
+            "subfinder -h"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Web Attack tools",
+      "description": "Dynamic tools for parameter mining and endpoint discovery",
+      "tools": [
+        {
+          "title": "ParamSpider",
+          "description": "Mining URLs and query parameters from web archives",
+          "project_url": "https://github.com/devanshbatham/ParamSpider",
+          "supported_os": ["linux", "macos"],
+          "tags": ["web", "recon", "parameters"],
+          "install_commands": [
+            "git clone https://github.com/devanshbatham/ParamSpider.git",
+            "cd ParamSpider && pip3 install -r requirements.txt"
+          ],
+          "run_commands": [
+            "cd ParamSpider && python3 paramspider.py --help"
+          ]
+        },
+        {
+          "title": "Arjun",
+          "description": "HTTP parameter discovery suite",
+          "project_url": "https://github.com/s0md3v/Arjun",
+          "supported_os": ["linux", "macos"],
+          "tags": ["web", "recon", "parameters"],
+          "install_commands": [
+            "pip3 install arjun"
+          ],
+          "run_commands": [
+            "arjun -h"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Anonymously Hiding Tools",
+      "description": "Dynamic anonymity and traffic routing tools",
+      "tools": [
+        {
+          "title": "Proxychains-NG Setup",
+          "description": "Automates basic proxychains-ng installation and default SOCKS5 configuration",
+          "project_url": "https://github.com/rofl0r/proxychains-ng",
+          "supported_os": ["linux"],
+          "tags": ["anonymity", "network", "proxy"],
+          "install_commands": [
+            "sudo apt-get install -y proxychains4 || sudo apt-get install -y proxychains-ng",
+            "if [ -f /etc/proxychains4.conf ]; then sudo sed -i 's/^socks4.*/socks5 127.0.0.1 9050/' /etc/proxychains4.conf; fi"
+          ],
+          "run_commands": [
+            "proxychains4 -h"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Exploit framework",
+      "description": "Dynamic exploit tooling and helper generators",
+      "tools": [
+        {
+          "title": "Log4j-Payload-Generator",
+          "description": "Generate payload strings for Log4Shell testing workflows",
+          "project_url": "https://github.com/BobTheShoplifter/Log4j-Payload-Generator",
+          "supported_os": ["linux", "macos"],
+          "tags": ["exploit", "java", "log4shell"],
+          "install_commands": [
+            "git clone https://github.com/BobTheShoplifter/Log4j-Payload-Generator.git"
+          ],
+          "run_commands": [
+            "cd Log4j-Payload-Generator && python3 generator.py -h"
+          ]
+        }
+      ]
+    }
+  ]
+}

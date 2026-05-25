@@ -1,9 +1,13 @@
 import os
 import shutil
 import sys
+import subprocess
 import webbrowser
+import shlex
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable
 from platform import system
+from urllib.parse import urlparse
 
 from rich import box
 from rich.console import Console
@@ -38,7 +42,7 @@ console = Console(theme=_theme)
 
 
 def clear_screen():
-    os.system("cls" if system() == "Windows" else "clear")
+    subprocess.run("cls" if system() == "Windows" else "clear", check=False, shell=True)
 
 
 def validate_input(ip, val_range: list) -> int | None:
@@ -207,13 +211,94 @@ class HackingTool:
 
     def before_install(self): pass
 
+    @staticmethod
+    def _extract_clone_url(command: str) -> str | None:
+        if "git clone" not in command:
+            return None
+        try:
+            parts = shlex.split(command)
+        except ValueError:
+            return None
+        for part in parts:
+            if part.startswith(("http://", "https://")):
+                return part
+        return None
+
+    @staticmethod
+    def _is_valid_url(url: str) -> bool:
+        parsed = urlparse(url)
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+    @staticmethod
+    def _git_url_reachable(url: str) -> bool:
+        result = subprocess.run(
+            ["git", "ls-remote", url],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0
+
+    @staticmethod
+    def _missing_commands_from_string(command: str) -> list[str]:
+        missing: list[str] = []
+        if "git" in command and shutil.which("git") is None:
+            missing.append("git")
+        if ("pip3" in command or "python3 -m pip" in command) and shutil.which("pip3") is None:
+            missing.append("python3-pip")
+        if "python3" in command and shutil.which("python3") is None:
+            missing.append("python3")
+        return missing
+
+    def _run_command(self, command: str, cwd: str | None = None) -> bool:
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=cwd,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except OSError as exc:
+            console.print(f"[error]Failed to start command: {exc}[/error]")
+            return False
+
+        if result.stdout:
+            console.print(result.stdout.rstrip())
+        if result.returncode != 0:
+            if result.stderr:
+                console.print(f"[error]{result.stderr.rstrip()}[/error]")
+            console.print(f"[error]Command failed with exit code {result.returncode}[/error]")
+            return False
+        return True
+
     def install(self):
         self.before_install()
+        all_ok = True
         if isinstance(self.INSTALL_COMMANDS, (list, tuple)):
             for cmd in self.INSTALL_COMMANDS:
+                missing = self._missing_commands_from_string(cmd)
+                if missing:
+                    console.print(f"[error]Missing dependency/dependencies: {', '.join(sorted(set(missing)))}[/error]")
+                    all_ok = False
+                    continue
+                clone_url = self._extract_clone_url(cmd)
+                if clone_url and not self._is_valid_url(clone_url):
+                    console.print(f"[error]Invalid git URL in command: {clone_url}[/error]")
+                    all_ok = False
+                    continue
+                if clone_url and not self._git_url_reachable(clone_url):
+                    console.print(f"[error]Unreachable or broken git URL: {clone_url}[/error]")
+                    all_ok = False
+                    continue
                 console.print(f"[warning]→ {cmd}[/warning]")
-                os.system(cmd)
-        self.after_install()
+                if not self._run_command(cmd):
+                    all_ok = False
+        if all_ok:
+            self.after_install()
+        else:
+            console.print("[warning]Install completed with errors.[/warning]")
 
     def after_install(self):
         console.print("[success]✔ Successfully installed![/success]")
@@ -226,7 +311,7 @@ class HackingTool:
             if isinstance(self.UNINSTALL_COMMANDS, (list, tuple)):
                 for cmd in self.UNINSTALL_COMMANDS:
                     console.print(f"[error]→ {cmd}[/error]")
-                    os.system(cmd)
+                    self._run_command(cmd)
         self.after_uninstall()
 
     def after_uninstall(self): pass
@@ -247,23 +332,23 @@ class HackingTool:
                     dirname = repo_urls[0].rstrip("/").rsplit("/", 1)[-1].replace(".git", "")
                     if os.path.isdir(dirname):
                         console.print(f"[cyan]→ git -C {dirname} pull[/cyan]")
-                        os.system(f"git -C {dirname} pull")
+                        self._run_command(f"git -C {dirname} pull")
                         updated = True
             elif "pip install" in ic:
                 # Re-run pip install (--upgrade)
                 upgrade_cmd = ic.replace("pip install", "pip install --upgrade")
                 console.print(f"[cyan]→ {upgrade_cmd}[/cyan]")
-                os.system(upgrade_cmd)
+                self._run_command(upgrade_cmd)
                 updated = True
             elif "go install" in ic:
                 # Re-run go install (fetches latest)
                 console.print(f"[cyan]→ {ic}[/cyan]")
-                os.system(ic)
+                self._run_command(ic)
                 updated = True
             elif "gem install" in ic:
                 upgrade_cmd = ic.replace("gem install", "gem update")
                 console.print(f"[cyan]→ {upgrade_cmd}[/cyan]")
-                os.system(upgrade_cmd)
+                self._run_command(upgrade_cmd)
                 updated = True
 
         if updated:
@@ -313,7 +398,7 @@ class HackingTool:
         if tool_dir:
             console.print(f"[success]Opening folder: {tool_dir}[/success]")
             console.print("[dim]Type 'exit' to return to hackingtool.[/dim]")
-            os.system(f'cd "{tool_dir}" && $SHELL')
+            self._run_command(f'cd "{tool_dir}" && $SHELL')
         else:
             console.print("[warning]Tool directory not found.[/warning]")
             if self.PROJECT_URL:
@@ -327,7 +412,7 @@ class HackingTool:
         if isinstance(self.RUN_COMMANDS, (list, tuple)):
             for cmd in self.RUN_COMMANDS:
                 console.print(f"[cyan]⚙ Running:[/cyan] [bold]{cmd}[/bold]")
-                os.system(cmd)
+                self._run_command(cmd)
         self.after_run()
 
     def after_run(self): pass
@@ -435,6 +520,12 @@ class HackingToolsCollection:
                     "[bold green]97[/bold green]", "",
                     f"[bold green]Install all ({len(not_installed)} not installed)[/bold green]", "",
                 )
+            installed = [t for t in active if hasattr(t, "is_installed") and t.is_installed]
+            if installed:
+                table.add_row(
+                    "[bold cyan]96[/bold cyan]", "",
+                    f"[bold cyan]Update all ({len(installed)} installed)[/bold cyan]", "",
+                )
             if archived:
                 table.add_row("[dim]98[/dim]", "", f"[archived]Archived tools ({len(archived)})[/archived]", "")
             if incompatible:
@@ -465,17 +556,41 @@ class HackingToolsCollection:
 
             if choice == 99:
                 return
+            elif choice == 96 and installed:
+                console.print(Panel(
+                    f"[bold]Updating {len(installed)} tools...[/bold]",
+                    border_style="cyan", box=box.ROUNDED,
+                ))
+                max_workers = min(4, len(installed))
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(tool.update): tool for tool in installed}
+                    done = 0
+                    for future in as_completed(futures):
+                        done += 1
+                        tool = futures[future]
+                        try:
+                            future.result()
+                            console.print(f"[success]({done}/{len(installed)}) ✔ {tool.TITLE}[/success]")
+                        except Exception as exc:
+                            console.print(f"[error]({done}/{len(installed)}) ✘ {tool.TITLE}: {exc}[/error]")
+                Prompt.ask("\n[dim]Press Enter to continue[/dim]", default="")
             elif choice == 97 and not_installed:
                 console.print(Panel(
                     f"[bold]Installing {len(not_installed)} tools...[/bold]",
                     border_style="green", box=box.ROUNDED,
                 ))
-                for i, tool in enumerate(not_installed, start=1):
-                    console.print(f"\n[bold cyan]({i}/{len(not_installed)})[/bold cyan] {tool.TITLE}")
-                    try:
-                        tool.install()
-                    except Exception:
-                        console.print(f"[error]✘ Failed: {tool.TITLE}[/error]")
+                max_workers = min(4, len(not_installed))
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(tool.install): tool for tool in not_installed}
+                    done = 0
+                    for future in as_completed(futures):
+                        done += 1
+                        tool = futures[future]
+                        try:
+                            future.result()
+                            console.print(f"[success]({done}/{len(not_installed)}) ✔ {tool.TITLE}[/success]")
+                        except Exception as exc:
+                            console.print(f"[error]({done}/{len(not_installed)}) ✘ {tool.TITLE}: {exc}[/error]")
                 Prompt.ask("\n[dim]Press Enter to continue[/dim]", default="")
             elif choice == 98 and archived:
                 self._show_archived_tools()

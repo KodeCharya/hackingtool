@@ -17,6 +17,7 @@ import datetime
 import random
 import webbrowser
 from itertools import zip_longest
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
@@ -52,6 +53,7 @@ from tools.xss_attack import XSSAttackTools
 from tools.active_directory import ActiveDirectoryTools
 from tools.cloud_security import CloudSecurityTools
 from tools.mobile_security import MobileSecurityTools
+from dynamic_tools import load_dynamic_categories
 
 # ── Tool registry ──────────────────────────────────────────────────────────────
 
@@ -105,6 +107,32 @@ all_tools = [
     OtherTools(),
     ToolManager(),
 ]
+
+
+def _merge_dynamic_categories() -> None:
+    dynamic_config = Path(__file__).with_name("tool_registry.json")
+    dynamic_categories = load_dynamic_categories(dynamic_config)
+    if not dynamic_categories:
+        return
+
+    existing_by_title = {category.TITLE: category for category in all_tools}
+
+    for dynamic_category in dynamic_categories:
+        if dynamic_category.TITLE in existing_by_title:
+            existing = existing_by_title[dynamic_category.TITLE]
+            existing_titles = {tool.TITLE for tool in existing.TOOLS}
+            for tool in dynamic_category.TOOLS:
+                if tool.TITLE not in existing_titles:
+                    existing.TOOLS.append(tool)
+        else:
+            all_tools.insert(len(all_tools) - 1, dynamic_category)
+            tool_definitions.insert(
+                len(tool_definitions) - 1,
+                (dynamic_category.TITLE, "🆕", dynamic_category.TITLE),
+            )
+
+
+_merge_dynamic_categories()
 
 # Used by generate_readme.py
 class AllTools(HackingToolsCollection):
